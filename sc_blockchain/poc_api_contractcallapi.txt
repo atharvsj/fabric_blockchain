@@ -1,0 +1,63 @@
+1)to register user request on-chain blockchain 
+http://localhost:3000/api/submit-change
+
+{
+  "userId": "string",
+  "hash": "string"
+}
+
+
+output:
+{
+  "success": true,
+  "message": "Change request submitted",
+  "txHash": "0x123..."
+}
+
+
+2)admin to approve changes after check 
+http://localhost:3000/api/approve
+{
+  "id": 1,
+  "reason": "Valid data"
+}
+output:
+{
+  "success": true,
+  "message": "Approved successfully",
+  "txHash": "0xabc..."
+}
+
+3)admin to reject changes after check 
+http://localhost:3000/api/reject
+
+{
+  "id": 1,
+  "reason": "Invalid content"
+}
+
+output:
+{
+  "success": true,
+  "message": "Rejected successfully",
+  "txHash": "0xxyz..."
+}
+
+
+4)get changes status approved or rejected
+http://localhost:3000/api/get-change/:id
+
+output:
+{
+  "success": true,
+  "change": {
+    "id": 1,
+    "userId": "100",
+    "hash": "QmHashValue",
+    "status": 0,
+    "reason": ""
+  }
+}
+
+
+
