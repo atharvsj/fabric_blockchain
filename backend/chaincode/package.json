@@ -1,0 +1,15 @@
+{
+    "name": "recordhash-chaincode",
+    "version": "1.0.0",
+    "description": "Hyperledger Fabric chaincode for storing record hashes",
+    "main": "recordhash-contract.js",
+    "scripts": {
+        "start": "fabric-chaincode-node start"
+    },
+    "dependencies": {
+        "fabric-contract-api": "^2.2.0",
+        "fabric-shim": "^2.2.0"
+    },
+    "author": "",
+    "license": "ISC"
+}

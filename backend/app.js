@@ -45,7 +45,8 @@ app.get('/', (req, res) => {
         endpoints: {
             health: '/api/health',
             auth: '/api/auth',
-            fabric: '/api/fabric'
+            fabric: '/api/fabric',
+            records: '/api/records'
         }
     });
 });

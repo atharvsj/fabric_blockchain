@@ -1,0 +1,53 @@
+{
+    "contracts": {
+        "RecordHashContract": {
+            "name": "RecordHashContract",
+            "transactions": [
+                {
+                    "name": "InitLedger"
+                },
+                {
+                    "name": "StoreRecordHash",
+                    "parameters": [
+                        {"name": "recordId", "schema": {"type": "string"}},
+                        {"name": "hash", "schema": {"type": "string"}},
+                        {"name": "timestamp", "schema": {"type": "string"}}
+                    ]
+                },
+                {
+                    "name": "GetRecordHash",
+                    "parameters": [
+                        {"name": "recordId", "schema": {"type": "string"}}
+                    ]
+                },
+                {
+                    "name": "RecordExists",
+                    "parameters": [
+                        {"name": "recordId", "schema": {"type": "string"}}
+                    ]
+                },
+                {
+                    "name": "UpdateRecordHash",
+                    "parameters": [
+                        {"name": "recordId", "schema": {"type": "string"}},
+                        {"name": "newHash", "schema": {"type": "string"}},
+                        {"name": "timestamp", "schema": {"type": "string"}}
+                    ]
+                },
+                {
+                    "name": "GetRecordHistory",
+                    "parameters": [
+                        {"name": "recordId", "schema": {"type": "string"}}
+                    ]
+                },
+                {
+                    "name": "GetAllRecordHashes",
+                    "parameters": [
+                        {"name": "pageSize", "schema": {"type": "string"}},
+                        {"name": "bookmark", "schema": {"type": "string"}}
+                    ]
+                }
+            ]
+        }
+    }
+}
