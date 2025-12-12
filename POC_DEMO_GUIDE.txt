@@ -1,0 +1,537 @@
+================================================================================
+                    FABRIC BLOCKCHAIN POC - DEMO GUIDE
+                    Step-by-Step Procedure for Client Demo
+================================================================================
+
+TABLE OF CONTENTS
+-----------------
+1. What This Project Does (Simple Explanation)
+2. Architecture Overview
+3. Prerequisites (What You Need Installed)
+4. Starting the Servers
+5. Demo Flow - Step by Step
+6. Postman API Calls (Copy-Paste Ready)
+7. Verifying Data in PostgreSQL
+8. Verifying Data on Blockchain
+9. Troubleshooting Common Issues
+10. Key Files Reference
+
+================================================================================
+1. WHAT THIS PROJECT DOES (SIMPLE EXPLANATION)
+================================================================================
+
+Imagine you have important documents (certificates, records, contracts).
+You want to:
+  1. Store the FULL document in a database (PostgreSQL) - this is "OFF-CHAIN"
+  2. Create a unique fingerprint (hash) of that document
+  3. Store ONLY the fingerprint on blockchain (Polygon) - this is "ON-CHAIN"
+  4. Later, verify if the document was tampered by comparing fingerprints
+
+WHY THIS APPROACH?
+- Blockchain storage is expensive → store only small hash (fingerprint)
+- Database is cheap → store full document details
+- If someone changes the document, the hash won't match → TAMPER DETECTED!
+
+FLOW DIAGRAM:
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│   [User/Client]                                                             │
+│        │                                                                    │
+│        │ 1. POST /api/records (send document data)                          │
+│        ▼                                                                    │
+│   [Backend Server - Port 3000]                                              │
+│        │                                                                    │
+│        ├──► 2. Store FULL data in PostgreSQL (temporary/off-chain)          │
+│        │                                                                    │
+│        ├──► 3. Compute SHA-256 hash of the data                             │
+│        │                                                                    │
+│        ├──► 4. Send hash to Smart Contract API ─────────────────────┐       │
+│        │                                                            │       │
+│        │                                              [SC API - Port 5000]  │
+│        │                                                            │       │
+│        │                                              5. Store hash on      │
+│        │                                                 Polygon Blockchain │
+│        │                                                            │       │
+│        │◄── 6. Receive Transaction ID (txHash) ◄────────────────────┘       │
+│        │                                                                    │
+│        ├──► 7. Update PostgreSQL with txHash (now PERMANENT)                │
+│        │                                                                    │
+│        ▼                                                                    │
+│   [Response to User]                                                        │
+│   - Record details                                                          │
+│   - Hash value                                                              │
+│   - Blockchain transaction ID                                               │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+2. ARCHITECTURE OVERVIEW
+================================================================================
+
+You have TWO servers running:
+
+SERVER 1: Backend API (YOUR CODE)
+- Location: d:\icici\fabric_blockchain\backend
+- Port: 3000
+- Purpose: Handle user requests, store in database, compute hash
+- URL: http://localhost:3000
+
+SERVER 2: Smart Contract API (BLOCKCHAIN DEV'S CODE)
+- Location: d:\icici\fabric_blockchain\sc_blockchain
+- Port: 5000
+- Purpose: Communicate with Polygon blockchain
+- URL: http://localhost:5000
+
+DATABASE: PostgreSQL
+- Database name: icici
+- Schema: fabric_test
+- Table: records
+
+BLOCKCHAIN: Polygon Amoy Testnet
+- Contract Address: 0x8638b93cad13f716f3f22abe5ec5432fd2f4aabf
+- Explorer: https://amoy.polygonscan.com
+
+================================================================================
+3. PREREQUISITES (WHAT YOU NEED INSTALLED)
+================================================================================
+
+Before starting, make sure you have:
+
+[✓] Node.js (version 18 or higher)
+    - Check: Open CMD, type: node --version
+    
+[✓] PostgreSQL (running on localhost:5432)
+    - Database "icici" should exist
+    - Schema "fabric_test" should exist
+    - Table "records" should exist
+    
+[✓] Postman (for testing APIs)
+    - Download from: https://www.postman.com/downloads/
+
+[✓] VS Code (for viewing/editing code)
+
+================================================================================
+4. STARTING THE SERVERS
+================================================================================
+
+You need to start BOTH servers in separate terminals.
+
+STEP 1: Open Terminal 1 (for Smart Contract API)
+------------------------------------------------
+Open Command Prompt or PowerShell and run:
+
+    cd d:\icici\fabric_blockchain\sc_blockchain
+    npm install                          (only first time)
+    node index.js
+
+You should see:
+    ℹ️ Event listeners disabled (free tier RPC limit)
+    Server running on port 5000
+
+Keep this terminal OPEN!
+
+STEP 2: Open Terminal 2 (for Backend API)
+-----------------------------------------
+Open ANOTHER Command Prompt or PowerShell and run:
+
+    cd d:\icici\fabric_blockchain\backend
+    npm install                          (only first time)
+    node app.js
+
+You should see:
+    [INFO] Blockchain service initialized in POLYGON mode
+    [INFO] Server running on port 3000
+    [INFO] API available at: http://localhost:3000
+
+Keep this terminal OPEN!
+
+STEP 3: Verify both servers are running
+---------------------------------------
+Open browser and go to:
+    http://localhost:3000/api/health
+
+You should see:
+    {"success":true,"message":"API is running","timestamp":"..."}
+
+================================================================================
+5. DEMO FLOW - STEP BY STEP
+================================================================================
+
+Here's exactly what to do during the demo:
+
+PHASE 1: SHOW THE EMPTY STATE
+-----------------------------
+1. Open PostgreSQL (pgAdmin or DBeaver)
+2. Run: SELECT * FROM fabric_test.records;
+3. Show: "Currently no records in the database"
+
+PHASE 2: CREATE A RECORD (Off-chain + On-chain)
+-----------------------------------------------
+1. Open Postman
+2. Create new request:
+   - Method: POST
+   - URL: http://localhost:3000/api/records
+   - Body: (see Section 6 for exact JSON)
+3. Click SEND
+4. Show the response:
+   - Record was created
+   - Hash was computed
+   - Transaction ID from blockchain
+
+PHASE 3: VERIFY DATA IS STORED OFF-CHAIN
+-----------------------------------------
+1. Go back to PostgreSQL
+2. Run: SELECT * FROM fabric_test.records;
+3. Show: "Record is now in database with hash and blockchain_tx_id"
+
+PHASE 4: VERIFY DATA IS STORED ON-CHAIN
+---------------------------------------
+1. Copy the blockchain_tx_id from the response
+2. Go to: https://amoy.polygonscan.com
+3. Paste the transaction hash in search
+4. Show: "This is the blockchain proof - immutable and permanent"
+
+PHASE 5: VERIFY RECORD INTEGRITY
+--------------------------------
+1. In Postman, create new request:
+   - Method: GET
+   - URL: http://localhost:3000/api/records/{id}/verify
+   - (Replace {id} with the actual record ID)
+2. Show response: "valid: true" means data hasn't been tampered
+
+PHASE 6: DEMONSTRATE TAMPER DETECTION (Optional)
+------------------------------------------------
+1. Go to PostgreSQL
+2. Manually change the data_json value slightly
+3. Call the verify API again
+4. Show: "valid: false" - TAMPER DETECTED!
+
+================================================================================
+6. POSTMAN API CALLS (COPY-PASTE READY)
+================================================================================
+
+----------------------------------------------------------------------
+API 1: HEALTH CHECK
+----------------------------------------------------------------------
+Method: GET
+URL: http://localhost:3000/api/health
+
+Expected Response:
+{
+    "success": true,
+    "message": "API is running",
+    "timestamp": "2025-12-12T06:00:00.000Z"
+}
+
+----------------------------------------------------------------------
+API 2: CREATE A NEW RECORD
+----------------------------------------------------------------------
+Method: POST
+URL: http://localhost:3000/api/records
+
+Headers:
+    Content-Type: application/json
+
+Body (raw JSON):
+{
+    "title": "Employee Joining Certificate",
+    "owner_name": "Rahul Sharma",
+    "data_json": {
+        "certificate_id": "CERT-2025-001",
+        "employee_id": "EMP-12345",
+        "employee_name": "Rahul Sharma",
+        "department": "Technology",
+        "designation": "Software Developer",
+        "joining_date": "2025-01-15",
+        "issued_by": "HR Department",
+        "issued_date": "2025-01-20"
+    }
+}
+
+Expected Response:
+{
+    "success": true,
+    "message": "Record created and stored on blockchain",
+    "data": {
+        "record": {
+            "id": "abc123-uuid-here",
+            "title": "Employee Joining Certificate",
+            "owner_name": "Rahul Sharma",
+            "data_json": { ... },
+            "created_at": "2025-12-12T06:00:00.000Z"
+        },
+        "onChainProof": {
+            "hash": "0x1234567890abcdef...",
+            "transactionId": "0xabcdef1234567890...",
+            "timestamp": "2025-12-12T06:00:00.000Z",
+            "blockchainMode": "polygon"
+        }
+    }
+}
+
+----------------------------------------------------------------------
+API 3: GET ALL RECORDS
+----------------------------------------------------------------------
+Method: GET
+URL: http://localhost:3000/api/records
+
+Expected Response:
+{
+    "success": true,
+    "message": "Records retrieved successfully",
+    "data": {
+        "records": [ ... array of records ... ],
+        "pagination": {
+            "total": 5,
+            "limit": 50,
+            "offset": 0,
+            "hasMore": false
+        }
+    }
+}
+
+----------------------------------------------------------------------
+API 4: GET SINGLE RECORD
+----------------------------------------------------------------------
+Method: GET
+URL: http://localhost:3000/api/records/{record-id}
+
+Replace {record-id} with actual UUID from create response.
+
+Example: http://localhost:3000/api/records/65b33cb5-bb12-444f-ba86-90a385a6d239
+
+----------------------------------------------------------------------
+API 5: VERIFY RECORD INTEGRITY (Most Important for Demo!)
+----------------------------------------------------------------------
+Method: GET
+URL: http://localhost:3000/api/records/{record-id}/verify
+
+Example: http://localhost:3000/api/records/65b33cb5-bb12-444f-ba86-90a385a6d239/verify
+
+Expected Response (if data is NOT tampered):
+{
+    "success": true,
+    "message": "Record verified: data integrity confirmed",
+    "data": {
+        "recordId": "65b33cb5-bb12-444f-ba86-90a385a6d239",
+        "title": "Employee Joining Certificate",
+        "owner_name": "Rahul Sharma",
+        "verification": {
+            "valid": true,
+            "reason": "Hash matches on-chain record",
+            "currentHash": "0x1234...",
+            "onChainHash": "0x1234...",
+            "transactionId": "0xabcd..."
+        }
+    }
+}
+
+Expected Response (if data WAS tampered):
+{
+    "success": true,
+    "message": "Record verification failed: data may have been tampered",
+    "data": {
+        "verification": {
+            "valid": false,
+            "reason": "Hash mismatch - data may have been tampered",
+            "currentHash": "0x5678...",    <-- Different!
+            "onChainHash": "0x1234..."     <-- Original
+        }
+    }
+}
+
+----------------------------------------------------------------------
+API 6: CHECK BLOCKCHAIN SERVICE STATUS
+----------------------------------------------------------------------
+Method: GET
+URL: http://localhost:3000/api/records/blockchain/status
+
+Expected Response:
+{
+    "success": true,
+    "message": "Blockchain service status",
+    "data": {
+        "mode": "polygon",
+        "description": "Connected to Polygon blockchain via sc_blockchain API"
+    }
+}
+
+----------------------------------------------------------------------
+API 7: DELETE A RECORD
+----------------------------------------------------------------------
+Method: DELETE
+URL: http://localhost:3000/api/records/{record-id}
+
+================================================================================
+7. VERIFYING DATA IN POSTGRESQL
+================================================================================
+
+Open pgAdmin or any PostgreSQL client and run these queries:
+
+-- See all records
+SELECT * FROM fabric_test.records;
+
+-- See specific columns
+SELECT id, title, owner_name, hash_value, blockchain_tx_id, created_at 
+FROM fabric_test.records;
+
+-- Count total records
+SELECT COUNT(*) FROM fabric_test.records;
+
+-- Find record by title
+SELECT * FROM fabric_test.records WHERE title LIKE '%Certificate%';
+
+COLUMNS EXPLAINED:
+- id: Unique identifier (UUID)
+- title: Human-readable title
+- owner_name: Who owns this record
+- data_json: Full document data (JSONB)
+- hash_value: SHA-256 hash of data_json
+- blockchain_tx_id: Transaction ID from Polygon blockchain
+- created_at: When record was created
+
+================================================================================
+8. VERIFYING DATA ON BLOCKCHAIN
+================================================================================
+
+STEP 1: Get the transaction ID
+------------------------------
+After creating a record, copy the "transactionId" from the response.
+Example: 0x123abc456def789...
+
+STEP 2: Open Polygon Explorer
+-----------------------------
+Go to: https://amoy.polygonscan.com
+
+STEP 3: Search for transaction
+------------------------------
+Paste the transaction ID in the search box and press Enter.
+
+STEP 4: Show the details
+------------------------
+You'll see:
+- Transaction Hash
+- Status: Success
+- Block Number
+- Timestamp
+- From: (the wallet address)
+- To: (the contract address)
+- Transaction Action
+
+This proves the hash is permanently stored on the blockchain!
+
+================================================================================
+9. TROUBLESHOOTING COMMON ISSUES
+================================================================================
+
+ISSUE: "Cannot connect to server"
+---------------------------------
+SOLUTION: Make sure both servers are running (see Section 4)
+
+ISSUE: "Database connection failed"
+-----------------------------------
+SOLUTION: 
+1. Check PostgreSQL is running
+2. Verify password in backend\.env file (DB_PASSWORD=123456)
+3. Make sure database "icici" and schema "fabric_test" exist
+
+ISSUE: "Blockchain mode is MOCK, not POLYGON"
+---------------------------------------------
+SOLUTION:
+1. Open d:\icici\fabric_blockchain\backend\.env
+2. Change: BLOCKCHAIN_MODE=mock
+   To:     BLOCKCHAIN_MODE=polygon
+3. Restart the backend server
+
+ISSUE: "RPC rate limit exceeded"
+--------------------------------
+SOLUTION: 
+This happens with free tier RPC. Wait a few seconds and try again.
+For production, use a paid RPC provider.
+
+ISSUE: "Port 3000 already in use"
+---------------------------------
+SOLUTION:
+1. Find process: netstat -ano | findstr :3000
+2. Kill process: taskkill /PID <process-id> /F
+3. Restart server
+
+ISSUE: "Transaction failed"
+---------------------------
+SOLUTION:
+1. Check if the wallet has enough MATIC for gas fees
+2. Check if RPC URL is correct in sc_blockchain\.env
+3. Try again after a few seconds
+
+================================================================================
+10. KEY FILES REFERENCE
+================================================================================
+
+BACKEND (Your Code):
+--------------------
+d:\icici\fabric_blockchain\backend\
+
+├── app.js                              # Main server file
+├── .env                                # Configuration (database, blockchain mode)
+├── config/
+│   └── db.config.js                    # PostgreSQL connection
+├── controllers/
+│   └── record.controller.js            # API logic (create, verify, etc.)
+├── services/
+│   ├── record.service.js               # Database operations
+│   └── blockchain.service.js           # Blockchain communication
+├── routes/
+│   └── record.routes.js                # API endpoint definitions
+└── utils/
+    └── hash.js                         # SHA-256 hashing
+
+SMART CONTRACT API (Blockchain Dev's Code):
+-------------------------------------------
+d:\icici\fabric_blockchain\sc_blockchain\
+
+├── index.js                            # Server entry point
+├── .env                                # RPC URL, private key, contract address
+├── config/
+│   └── blockchain.js                   # Ethers.js setup
+├── contract/
+│   └── contractABI.json                # Smart contract interface
+└── routes/
+    └── contractRoutes.js               # Blockchain API endpoints
+
+CONFIGURATION FILES (.env):
+---------------------------
+backend\.env:
+    BLOCKCHAIN_MODE=polygon             # Change to 'mock' for testing without blockchain
+    SC_BLOCKCHAIN_URL=http://localhost:5000
+    DB_HOST=localhost
+    DB_NAME=icici
+    DB_SCHEMA=fabric_test
+    DB_PASSWORD=123456
+
+sc_blockchain\.env:
+    RPC_URL=https://polygon-amoy.drpc.org
+    PRIVATE_KEY=<wallet-private-key>
+    CONTRACT_ADDRESS=0x8638b93cad13f716f3f22abe5ec5432fd2f4aabf
+
+================================================================================
+                              END OF GUIDE
+================================================================================
+
+QUICK START CHECKLIST:
+[  ] PostgreSQL running with database 'icici' and schema 'fabric_test'
+[  ] Terminal 1: cd sc_blockchain && node index.js (Port 5000)
+[  ] Terminal 2: cd backend && node app.js (Port 3000)
+[  ] Backend .env has BLOCKCHAIN_MODE=polygon
+[  ] Test health endpoint: http://localhost:3000/api/health
+[  ] Create record in Postman
+[  ] Verify record integrity
+[  ] Show transaction on Polygonscan
+
+DEMO TALKING POINTS:
+1. "We store full data in our secure database - this is off-chain storage"
+2. "We create a unique fingerprint (hash) of the data"
+3. "Only the fingerprint is stored on blockchain - immutable and permanent"
+4. "If anyone tampers with the database, the hash won't match"
+5. "This proves data integrity without storing sensitive data on public blockchain"
+
+================================================================================

@@ -1,16 +1,15 @@
 /**
  * Blockchain Integration Service
- * Handles communication with Hyperledger Fabric for storing/retrieving hashes
+ * Handles communication with Polygon Smart Contract for storing/retrieving hashes
  * 
  * This service provides an abstraction layer that can work in two modes:
  * 1. MOCK mode (default for development) - Simulates blockchain responses
- * 2. FABRIC mode - Uses actual Hyperledger Fabric SDK
+ * 2. POLYGON mode - Calls the sc_blockchain API (Polygon smart contract)
  * 
- * Set BLOCKCHAIN_MODE=fabric in .env to use real Fabric network
+ * Set BLOCKCHAIN_MODE=polygon in .env to use real Polygon network
  */
 
 const logger = require('../utils/logger');
-const fabricService = require('./fabric.service');
 
 // In-memory store for mock mode (simulates blockchain ledger)
 const mockLedger = new Map();
@@ -18,6 +17,7 @@ const mockLedger = new Map();
 class BlockchainService {
     constructor() {
         this.mode = process.env.BLOCKCHAIN_MODE || 'mock';
+        this.scBlockchainUrl = process.env.SC_BLOCKCHAIN_URL || 'http://localhost:5000';
         logger.info(`Blockchain service initialized in ${this.mode.toUpperCase()} mode`);
     }
 
@@ -28,8 +28,8 @@ class BlockchainService {
      * @returns {Promise<Object>} Transaction result with tx_id
      */
     async storeRecordHash(recordId, hash) {
-        if (this.mode === 'fabric') {
-            return await this._storeOnFabric(recordId, hash);
+        if (this.mode === 'polygon') {
+            return await this._storeOnPolygon(recordId, hash);
         }
         return await this._storeOnMock(recordId, hash);
     }
@@ -40,8 +40,8 @@ class BlockchainService {
      * @returns {Promise<Object>} Stored hash data
      */
     async getRecordHash(recordId) {
-        if (this.mode === 'fabric') {
-            return await this._getFromFabric(recordId);
+        if (this.mode === 'polygon') {
+            return await this._getFromPolygon(recordId);
         }
         return await this._getFromMock(recordId);
     }
@@ -140,88 +140,95 @@ class BlockchainService {
         return new Promise(resolve => setTimeout(resolve, delay));
     }
 
-    // ==================== FABRIC MODE METHODS ====================
+    // ==================== POLYGON MODE METHODS ====================
 
     /**
-     * Store hash on Hyperledger Fabric network
-     * Uses the chaincode function: StoreRecordHash(recordId, hash, timestamp)
+     * Store hash on Polygon network via sc_blockchain API
+     * Calls: POST /api/submit-change { userId, hash }
      */
-    async _storeOnFabric(recordId, hash) {
+    async _storeOnPolygon(recordId, hash) {
         try {
-            const userId = process.env.FABRIC_USER_ID || 'appUser';
-            const timestamp = new Date().toISOString();
+            logger.info(`[POLYGON] Storing hash on blockchain - Record: ${recordId}`);
 
-            logger.info(`[FABRIC] Storing hash on blockchain - Record: ${recordId}`);
+            // Convert UUID to a numeric userId for the smart contract
+            // Using a hash of the recordId to generate a numeric ID
+            const userId = this._uuidToNumericId(recordId);
 
-            // Submit transaction to chaincode
-            // Chaincode function: StoreRecordHash(recordId, hash, timestamp)
-            const result = await fabricService.submitTransaction(
-                userId,
-                'StoreRecordHash',
-                recordId,
-                hash,
-                timestamp
-            );
+            const response = await fetch(`${this.scBlockchainUrl}/api/submit-change`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    userId: userId,
+                    hash: hash
+                })
+            });
 
-            logger.info(`[FABRIC] Hash stored successfully - Record: ${recordId}`);
+            const result = await response.json();
 
-            // Parse the result if it's a string
-            const parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
+            if (!response.ok || !result.success) {
+                throw new Error(result.error || 'Failed to store hash on blockchain');
+            }
+
+            logger.info(`[POLYGON] Hash stored successfully - Record: ${recordId}, TX: ${result.txHash}`);
 
             return {
                 success: true,
-                tx_id: parsedResult.txId || parsedResult.tx_id,
+                tx_id: result.txHash,
                 recordId,
                 hash,
-                timestamp: parsedResult.timestamp || timestamp
+                timestamp: new Date().toISOString()
             };
         } catch (error) {
-            logger.error('[FABRIC] Error storing hash:', error);
+            logger.error('[POLYGON] Error storing hash:', error);
             throw error;
         }
     }
 
     /**
-     * Retrieve hash from Hyperledger Fabric network
-     * Uses the chaincode function: GetRecordHash(recordId)
+     * Retrieve hash from Polygon network via sc_blockchain API
+     * Calls: GET /api/get-change/:id
      */
-    async _getFromFabric(recordId) {
+    async _getFromPolygon(recordId) {
         try {
-            const userId = process.env.FABRIC_USER_ID || 'appUser';
+            logger.info(`[POLYGON] Retrieving hash from blockchain - Record: ${recordId}`);
 
-            logger.info(`[FABRIC] Retrieving hash from blockchain - Record: ${recordId}`);
+            // Convert UUID to numeric ID
+            const numericId = this._uuidToNumericId(recordId);
 
-            // Query chaincode
-            const result = await fabricService.evaluateTransaction(
-                userId,
-                'GetRecordHash',
-                recordId
-            );
+            const response = await fetch(`${this.scBlockchainUrl}/api/get-change/${numericId}`);
+            const result = await response.json();
 
-            if (!result) {
+            if (!response.ok || !result.success) {
+                logger.warn(`[POLYGON] Record not found on blockchain: ${recordId}`);
                 return null;
             }
 
-            // Parse the result
-            const data = typeof result === 'string' ? JSON.parse(result) : result;
-
-            if (!data.exists) {
-                logger.warn(`[FABRIC] Record not found on blockchain: ${recordId}`);
-                return null;
-            }
-
-            logger.info(`[FABRIC] Hash retrieved successfully - Record: ${recordId}`);
+            logger.info(`[POLYGON] Hash retrieved successfully - Record: ${recordId}`);
 
             return {
-                recordId: data.recordId,
-                hash: data.hash,
-                tx_id: data.txId,
-                timestamp: data.timestamp
+                recordId: recordId,
+                hash: result.change.hash,
+                tx_id: null, // Not available from get-change
+                timestamp: null,
+                status: result.change.status,
+                reason: result.change.reason
             };
         } catch (error) {
-            logger.error('[FABRIC] Error retrieving hash:', error);
+            logger.error('[POLYGON] Error retrieving hash:', error);
             throw error;
         }
+    }
+
+    /**
+     * Convert UUID to a numeric ID for the smart contract
+     * The smart contract expects uint256 userId
+     */
+    _uuidToNumericId(uuid) {
+        // Use the first 8 hex characters of UUID and convert to number
+        const hexPart = uuid.replace(/-/g, '').substring(0, 15);
+        return parseInt(hexPart, 16);
     }
 
     // ==================== UTILITY METHODS ====================

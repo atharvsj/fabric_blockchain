@@ -2,24 +2,27 @@ const express = require("express");
 const router = express.Router();
 const { contract } = require("../config/blockchain");
 
-// Event listeners
+// Event listeners (disabled to avoid RPC rate limits on free tier)
+// Uncomment if using a paid RPC provider
 function initEventListeners() {
-  console.log("⏳ Listening to blockchain events...");
+  // console.log("⏳ Listening to blockchain events...");
 
-  contract.on("ChangeSubmitted", (requestId, userId, hash) => {
-    console.log("📥 ChangeSubmitted EVENT:", { requestId, userId, hash });
-    // TODO: Save to off-chain DB
-  });
+  // contract.on("ChangeSubmitted", (requestId, userId, hash) => {
+  //   console.log("📥 ChangeSubmitted EVENT:", { requestId, userId, hash });
+  //   // TODO: Save to off-chain DB
+  // });
 
-  contract.on("ChangeApproved", (requestId, reason) => {
-    console.log("✅ ChangeApproved EVENT:", { requestId, reason });
-    // TODO: Move temp data → final DB
-  });
+  // contract.on("ChangeApproved", (requestId, reason) => {
+  //   console.log("✅ ChangeApproved EVENT:", { requestId, reason });
+  //   // TODO: Move temp data → final DB
+  // });
 
-  contract.on("ChangeRejected", (requestId, reason) => {
-    console.log("❌ ChangeRejected EVENT:", { requestId, reason });
-    // TODO: Mark as rejected in DB
-  });
+  // contract.on("ChangeRejected", (requestId, reason) => {
+  //   console.log("❌ ChangeRejected EVENT:", { requestId, reason });
+  //   // TODO: Mark as rejected in DB
+  // });
+  
+  console.log("ℹ️ Event listeners disabled (free tier RPC limit)");
 }
 
 initEventListeners();
