@@ -45,6 +45,21 @@ router.get('/:id', recordController.getRecord);
 router.get('/:id/verify', recordController.verifyRecord);
 
 /**
+ * @route   POST /api/records/:id/retry-blockchain
+ * @desc    Retry blockchain submission for records with null tx_id
+ * @access  Public (add auth middleware as needed)
+ */
+router.post('/:id/retry-blockchain', recordController.retryBlockchainSubmission);
+
+/**
+ * @route   PATCH /api/records/:id/blockchain-tx
+ * @desc    Manually update blockchain_tx_id (admin)
+ * @access  Public (add auth middleware as needed)
+ * @body    { blockchain_tx_id }
+ */
+router.patch('/:id/blockchain-tx', recordController.updateBlockchainTxId);
+
+/**
  * @route   DELETE /api/records/:id
  * @desc    Delete a record
  * @access  Public (add auth middleware as needed)

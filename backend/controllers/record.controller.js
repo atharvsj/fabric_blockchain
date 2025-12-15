@@ -247,11 +247,100 @@ const getBlockchainStatus = async (req, res) => {
     }
 };
 
+/**
+ * Retry blockchain submission for a record with null blockchain_tx_id
+ * POST /api/records/:id/retry-blockchain
+ */
+const retryBlockchainSubmission = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Get the record
+        const record = await recordService.findById(id);
+
+        if (!record) {
+            return errorResponse(res, 'Record not found', 404);
+        }
+
+        // Compute hash from data_json
+        const hash = record.hash_value || computeHash(record.data_json);
+        logger.info(`Retrying blockchain submission for record ${id} with hash: ${hash}`);
+
+        // Submit to blockchain
+        const blockchainResult = await blockchainService.storeRecordHash(id, hash);
+        logger.info(`Blockchain retry response for record ${id}:`, blockchainResult);
+
+        // Update DB with new tx_id
+        const updatedRecord = await recordService.updateBlockchainInfo(
+            id,
+            hash,
+            blockchainResult.tx_id
+        );
+
+        return successResponse(res, {
+            record: {
+                id: updatedRecord.id,
+                title: updatedRecord.title,
+                hash_value: updatedRecord.hash_value,
+                blockchain_tx_id: updatedRecord.blockchain_tx_id
+            },
+            onChainProof: {
+                hash: hash,
+                transactionId: blockchainResult.tx_id,
+                timestamp: blockchainResult.timestamp,
+                blockchainMode: blockchainService.getMode()
+            }
+        }, 'Blockchain submission successful');
+
+    } catch (error) {
+        logger.error('Error retrying blockchain submission:', error);
+        return errorResponse(res, 'Failed to submit to blockchain', 500, error);
+    }
+};
+
+/**
+ * Update blockchain_tx_id manually (admin endpoint)
+ * PATCH /api/records/:id/blockchain-tx
+ */
+const updateBlockchainTxId = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { blockchain_tx_id } = req.body;
+
+        if (!blockchain_tx_id) {
+            return errorResponse(res, 'blockchain_tx_id is required', 400);
+        }
+
+        const record = await recordService.findById(id);
+        if (!record) {
+            return errorResponse(res, 'Record not found', 404);
+        }
+
+        const updatedRecord = await recordService.updateBlockchainInfo(
+            id,
+            record.hash_value,
+            blockchain_tx_id
+        );
+
+        return successResponse(res, {
+            id: updatedRecord.id,
+            hash_value: updatedRecord.hash_value,
+            blockchain_tx_id: updatedRecord.blockchain_tx_id
+        }, 'Blockchain transaction ID updated');
+
+    } catch (error) {
+        logger.error('Error updating blockchain tx id:', error);
+        return errorResponse(res, 'Failed to update blockchain tx id', 500, error);
+    }
+};
+
 module.exports = {
     createRecord,
     getRecord,
     getAllRecords,
     verifyRecord,
     deleteRecord,
-    getBlockchainStatus
+    getBlockchainStatus,
+    retryBlockchainSubmission,
+    updateBlockchainTxId
 };
