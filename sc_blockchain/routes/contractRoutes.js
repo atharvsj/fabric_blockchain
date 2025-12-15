@@ -90,4 +90,66 @@ router.get("/get-change/:id", async (req, res) => {
   }
 });
 
+// Get all changes (paginated) - useful to see pending changes
+router.get("/get-all-changes", async (req, res) => {
+  const { start = 0, limit = 10 } = req.query;
+  const startId = parseInt(start);
+  const maxResults = Math.min(parseInt(limit), 50); // Cap at 50
+
+  try {
+    const changes = [];
+    for (let i = startId; i < startId + maxResults; i++) {
+      try {
+        const change = await contract.changes(i);
+        // Check if this is a valid entry (userId > 0 or hash is not empty)
+        if (change.userId.toString() !== "0" || change.hash !== "") {
+          changes.push({
+            id: i,
+            userId: change.userId.toString(),
+            hash: change.hash,
+            status: Number(change.status), // 0=Pending, 1=Approved, 2=Rejected
+            statusText: ["Pending", "Approved", "Rejected"][Number(change.status)] || "Unknown",
+            reason: change.reason
+          });
+        }
+      } catch (e) {
+        // No more entries, stop
+        break;
+      }
+    }
+    res.json({ success: true, changes, count: changes.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get only pending changes
+router.get("/get-pending-changes", async (req, res) => {
+  const { limit = 20 } = req.query;
+  const maxResults = Math.min(parseInt(limit), 100);
+
+  try {
+    const pendingChanges = [];
+    for (let i = 0; i < maxResults; i++) {
+      try {
+        const change = await contract.changes(i);
+        // Status 0 = Pending
+        if (Number(change.status) === 0 && (change.userId.toString() !== "0" || change.hash !== "")) {
+          pendingChanges.push({
+            id: i,
+            userId: change.userId.toString(),
+            hash: change.hash,
+            reason: change.reason
+          });
+        }
+      } catch (e) {
+        break;
+      }
+    }
+    res.json({ success: true, pendingChanges, count: pendingChanges.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

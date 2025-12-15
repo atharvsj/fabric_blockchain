@@ -224,11 +224,13 @@ class BlockchainService {
     /**
      * Convert UUID to a numeric ID for the smart contract
      * The smart contract expects uint256 userId
+     * Returns a string to avoid JavaScript number overflow issues with ethers.js
      */
     _uuidToNumericId(uuid) {
-        // Use the first 8 hex characters of UUID and convert to number
-        const hexPart = uuid.replace(/-/g, '').substring(0, 15);
-        return parseInt(hexPart, 16);
+        // Use the first 12 hex characters of UUID and convert to BigInt, then to string
+        // This ensures the value stays within safe bounds and ethers.js can parse it correctly
+        const hexPart = uuid.replace(/-/g, '').substring(0, 12);
+        return BigInt('0x' + hexPart).toString();
     }
 
     // ==================== UTILITY METHODS ====================
