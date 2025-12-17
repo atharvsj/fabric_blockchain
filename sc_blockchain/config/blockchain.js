@@ -21,4 +21,28 @@ const contract = new ethers.Contract(
   wallet
 );
 
-module.exports = { contract };
+// Nonce manager for handling concurrent transactions
+let currentNonce = null;
+let nonceInitialized = false;
+
+async function initNonce() {
+  if (!nonceInitialized) {
+    currentNonce = await provider.getTransactionCount(wallet.address, "pending");
+    nonceInitialized = true;
+    console.log(`📝 Nonce initialized: ${currentNonce}`);
+  }
+  return currentNonce;
+}
+
+function getAndIncrementNonce() {
+  const nonce = currentNonce;
+  currentNonce++;
+  return nonce;
+}
+
+function resetNonce() {
+  nonceInitialized = false;
+  currentNonce = null;
+}
+
+module.exports = { contract, wallet, provider, initNonce, getAndIncrementNonce, resetNonce };

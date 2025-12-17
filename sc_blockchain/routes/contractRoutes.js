@@ -1,45 +1,61 @@
 const express = require("express");
 const router = express.Router();
-const { contract } = require("../config/blockchain");
+const { contract, wallet, provider, initNonce, getAndIncrementNonce, resetNonce } = require("../config/blockchain");
+
+// Mutex lock for sequential transaction processing
+let isProcessing = false;
+const pendingRequests = [];
 
 // Event listeners (disabled to avoid RPC rate limits on free tier)
-// Uncomment if using a paid RPC provider
 function initEventListeners() {
-  // console.log("⏳ Listening to blockchain events...");
-
-  // contract.on("ChangeSubmitted", (requestId, userId, hash) => {
-  //   console.log("📥 ChangeSubmitted EVENT:", { requestId, userId, hash });
-  //   // TODO: Save to off-chain DB
-  // });
-
-  // contract.on("ChangeApproved", (requestId, reason) => {
-  //   console.log("✅ ChangeApproved EVENT:", { requestId, reason });
-  //   // TODO: Move temp data → final DB
-  // });
-
-  // contract.on("ChangeRejected", (requestId, reason) => {
-  //   console.log("❌ ChangeRejected EVENT:", { requestId, reason });
-  //   // TODO: Mark as rejected in DB
-  // });
-  
   console.log("ℹ️ Event listeners disabled (free tier RPC limit)");
 }
 
 initEventListeners();
+
+// Process queue sequentially
+async function processQueue() {
+  if (isProcessing || pendingRequests.length === 0) return;
+  
+  isProcessing = true;
+  const { req, res, resolve } = pendingRequests.shift();
+  
+  try {
+    const { userId, hash } = req.body;
+    
+    // Get fresh nonce from network
+    const nonce = await provider.getTransactionCount(wallet.address, "pending");
+    console.log(`📝 Using nonce: ${nonce}`);
+    
+    const tx = await contract.submitChange(userId, hash, { nonce });
+    console.log(`⏳ Transaction sent: ${tx.hash}`);
+    
+    // Wait for confirmation
+    const receipt = await tx.wait();
+    console.log(`✅ Transaction confirmed in block ${receipt.blockNumber}`);
+    
+    res.json({ success: true, message: "Change request submitted", txHash: tx.hash });
+  } catch (err) {
+    console.error('❌ Transaction error:', err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    isProcessing = false;
+    resolve();
+    // Process next in queue after a short delay
+    setTimeout(() => processQueue(), 1000);
+  }
+}
 
 // Routes
 router.post("/submit-change", async (req, res) => {
   const { userId, hash } = req.body;
   if (!userId || !hash) return res.status(400).json({ error: "Missing parameters" });
 
-  try {
-    const tx = await contract.submitChange(userId, hash);
-    await tx.wait();
-
-    res.json({ success: true, message: "Change request submitted", txHash: tx.hash });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  // Add to queue and wait
+  await new Promise(resolve => {
+    pendingRequests.push({ req, res, resolve });
+    processQueue();
+  });
 });
 
 router.post("/approve", async (req, res) => {
@@ -147,6 +163,70 @@ router.get("/get-pending-changes", async (req, res) => {
       }
     }
     res.json({ success: true, pendingChanges, count: pendingChanges.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get wallet/contract info
+router.get("/info", async (req, res) => {
+  try {
+    const walletAddress = await wallet.getAddress();
+    const balance = await provider.getBalance(walletAddress);
+    const network = await provider.getNetwork();
+    
+    res.json({
+      success: true,
+      info: {
+        walletAddress,
+        balance: balance.toString(),
+        balanceInPOL: (Number(balance) / 1e18).toFixed(6),
+        contractAddress: contract.target,
+        network: {
+          name: network.name,
+          chainId: Number(network.chainId)
+        }
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get transaction count/stats
+router.get("/stats", async (req, res) => {
+  const { maxId = 100 } = req.query;
+  
+  try {
+    let totalChanges = 0;
+    let pending = 0;
+    let approved = 0;
+    let rejected = 0;
+    
+    for (let i = 0; i < parseInt(maxId); i++) {
+      try {
+        const change = await contract.changes(i);
+        if (change.userId.toString() !== "0" || change.hash !== "") {
+          totalChanges++;
+          const status = Number(change.status);
+          if (status === 0) pending++;
+          else if (status === 1) approved++;
+          else if (status === 2) rejected++;
+        }
+      } catch (e) {
+        break;
+      }
+    }
+    
+    res.json({
+      success: true,
+      stats: {
+        totalChanges,
+        pending,
+        approved,
+        rejected
+      }
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

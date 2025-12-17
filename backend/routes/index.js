@@ -9,11 +9,13 @@ const router = express.Router();
 const authRoutes = require('./auth.routes');
 const fabricRoutes = require('./fabric.routes');
 const recordRoutes = require('./record.routes');
+const userRoutes = require('./user.routes');
 
 // Mount routes
 router.use('/auth', authRoutes);
 router.use('/fabric', fabricRoutes);
 router.use('/records', recordRoutes);
+router.use('/users', userRoutes);
 
 // Health check endpoint
 router.get('/health', (req, res) => {

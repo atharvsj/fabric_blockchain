@@ -1,0 +1,5 @@
+ORIGINAL:
+INSERT INTO `` (`staff_details_id`,`user_id`,`employee_id`,`department_id`,`designation_id`,`is_intern`,`reporting_manager`,`manager`,`office_shift_id`,`basic_salary`,`emp_ctc`,`gross_salary`,`gross_salary_yearly`,`ctc_monthly`,`ctc_yearly`,`hourly_rate`,`salay_type`,`role_description`,`date_of_joining`,`end_date_of_internship`,`date_of_leaving`,`date_of_promotion`,`date_of_birth`,`marital_status`,`religion_id`,`blood_group`,`citizenship_id`,`bio`,`experience`,`fb_profile`,`twitter_profile`,`gpl
+
+CONVERTED:
+INSERT INTO ci_erp_users_details (staff_details_id,user_id,employee_id,department_id,designation_id,is_intern,reporting_manager,manager,office_shift_id,basic_salary,emp_ctc,gross_salary,gross_salary_yearly,ctc_monthly,ctc_yearly,hourly_rate,salay_type,role_description,date_of_joining,end_date_of_internship,date_of_leaving,date_of_promotion,date_of_birth,marital_status,religion_id,blood_group,citizenship_id,bio,experience,fb_profile,twitter_profile,gplus_profile,linkedin_profile,account_title,pan
