@@ -1,6 +1,39 @@
 const express = require("express");
 const router = express.Router();
+const { Pool } = require('pg');
 const { contract, wallet, provider, initNonce, getAndIncrementNonce, resetNonce } = require("../config/blockchain");
+
+// Database connection for updating off-chain status
+const pool = new Pool({
+    host: process.env.DB_HOST || 'localhost',
+    port: process.env.DB_PORT || 5432,
+    database: process.env.DB_NAME || 'icici',
+    user: process.env.DB_USER || 'postgres',
+    password: process.env.DB_PASSWORD || '123456',
+});
+
+const SCHEMA = process.env.DB_SCHEMA || 'fabric_test';
+
+// Function to update blockchain_status in off-chain database
+async function updateOffChainStatus(hash, status) {
+    try {
+        const query = `
+            UPDATE ${SCHEMA}.user_chain_records 
+            SET blockchain_status = $1, updated_at = NOW()
+            WHERE hash_value = $2
+            RETURNING id, user_id, blockchain_status
+        `;
+        const result = await pool.query(query, [status, hash]);
+        if (result.rows.length > 0) {
+            console.log(`📝 Off-chain status updated: ${result.rows[0].user_id} -> ${status}`);
+            return result.rows[0];
+        }
+        return null;
+    } catch (error) {
+        console.error('❌ Failed to update off-chain status:', error.message);
+        return null;
+    }
+}
 
 // Mutex lock for sequential transaction processing
 let isProcessing = false;
@@ -63,10 +96,24 @@ router.post("/approve", async (req, res) => {
   if (!id || !reason) return res.status(400).json({ error: "Missing parameters" });
 
   try {
+    // First, get the change from blockchain to find the hash
+    const change = await contract.changes(id);
+    const hash = change.hash;
+    
+    // Execute blockchain transaction
     const tx = await contract.approve(id, reason);
     await tx.wait();
+    
+    // Update off-chain database status to 'A' (Approved)
+    const offChainUpdate = await updateOffChainStatus(hash, 'A');
 
-    res.json({ success: true, message: "Approved successfully", txHash: tx.hash });
+    res.json({ 
+      success: true, 
+      message: "Approved successfully", 
+      txHash: tx.hash,
+      offChainUpdated: offChainUpdate !== null,
+      offChainRecord: offChainUpdate
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -77,10 +124,24 @@ router.post("/reject", async (req, res) => {
   if (!id || !reason) return res.status(400).json({ error: "Missing parameters" });
 
   try {
+    // First, get the change from blockchain to find the hash
+    const change = await contract.changes(id);
+    const hash = change.hash;
+    
+    // Execute blockchain transaction
     const tx = await contract.reject(id, reason);
     await tx.wait();
+    
+    // Update off-chain database status to 'R' (Rejected)
+    const offChainUpdate = await updateOffChainStatus(hash, 'R');
 
-    res.json({ success: true, message: "Rejected successfully", txHash: tx.hash });
+    res.json({ 
+      success: true, 
+      message: "Rejected successfully", 
+      txHash: tx.hash,
+      offChainUpdated: offChainUpdate !== null,
+      offChainRecord: offChainUpdate
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

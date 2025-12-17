@@ -111,7 +111,8 @@ const createUser = async (req, res) => {
             data_json: newUser,
             hash_value: hash,
             blockchain_tx_id: blockchainResult?.tx_id || null,
-            operation_type: 'INSERT'
+            operation_type: 'INSERT',
+            blockchain_status: 'P'
         });
 
         return successResponse(res, {
@@ -170,7 +171,8 @@ const updateUser = async (req, res) => {
             data_json: updatedUser,
             hash_value: hash,
             blockchain_tx_id: blockchainResult?.tx_id || null,
-            operation_type: 'UPDATE'
+            operation_type: 'UPDATE',
+            blockchain_status: 'P'
         });
 
         return successResponse(res, {
@@ -191,19 +193,61 @@ const updateUser = async (req, res) => {
 
 /**
  * DELETE /api/users/:userId
- * Delete user (soft delete recommended for production)
+ * Delete user + store deletion record on blockchain
  */
 const deleteUser = async (req, res) => {
     try {
         const { userId } = req.params;
         
-        const deletedUser = await userService.deleteUser(userId);
+        // Get user data before deletion for blockchain record
+        const userToDelete = await userService.getUserById(userId);
         
-        if (!deletedUser) {
+        if (!userToDelete) {
             return errorResponse(res, 'User not found', 404);
         }
 
-        return successResponse(res, { userId }, 'User deleted successfully');
+        // 1. Compute hash of deletion record
+        const deletionData = {
+            user_id: userId,
+            deleted_at: new Date().toISOString(),
+            action: 'DELETE',
+            previous_data: userToDelete
+        };
+        const hash = computeHash(deletionData);
+        logger.info(`Computed hash for deleted user ${userId}: ${hash}`);
+
+        // 2. Store deletion hash on blockchain
+        let blockchainResult = null;
+        try {
+            blockchainResult = await blockchainService.storeRecordHash(userId.toString(), hash);
+            logger.info(`Blockchain result for deleted user ${userId}:`, blockchainResult);
+        } catch (bcError) {
+            logger.error('Blockchain storage failed:', bcError);
+        }
+
+        // 3. Create chain record for deletion
+        const chainRecordId = uuidv4();
+        await userService.createChainRecord({
+            id: chainRecordId,
+            user_id: userId.toString(),
+            data_json: deletionData,
+            hash_value: hash,
+            blockchain_tx_id: blockchainResult?.tx_id || null,
+            operation_type: 'DELETE',
+            blockchain_status: 'P'
+        });
+
+        // 4. Delete user from database
+        const deletedUser = await userService.deleteUser(userId);
+
+        return successResponse(res, { 
+            userId,
+            onChainProof: blockchainResult ? {
+                hash,
+                transactionId: blockchainResult.tx_id,
+                timestamp: blockchainResult.timestamp
+            } : null
+        }, 'User deleted and recorded on blockchain');
     } catch (error) {
         logger.error('Error deleting user:', error);
         return errorResponse(res, 'Failed to delete user', 500, error);
@@ -229,13 +273,24 @@ const getAllChainRecords = async (req, res) => {
 
 /**
  * GET /api/users/:userId/chain-records
- * Get chain records for a specific user
+ * Get chain records for a specific user with optional status filter
  */
 const getUserChainRecords = async (req, res) => {
     try {
         const { userId } = req.params;
-        const records = await userService.getChainRecordsByUserId(userId);
-        return successResponse(res, { records, count: records.length }, 'Chain records fetched successfully');
+        const { status } = req.query; // P = Pending, A = Approved, R = Rejected
+        
+        // Validate status if provided
+        if (status && !['P', 'A', 'R'].includes(status.toUpperCase())) {
+            return errorResponse(res, 'Invalid status. Use P (Pending), A (Approved), or R (Rejected)', 400);
+        }
+        
+        const records = await userService.getChainRecordsByUserId(userId, status ? status.toUpperCase() : null);
+        return successResponse(res, { 
+            records, 
+            count: records.length,
+            filter: status ? { status: status.toUpperCase() } : null
+        }, 'Chain records fetched successfully');
     } catch (error) {
         logger.error('Error fetching user chain records:', error);
         return errorResponse(res, 'Failed to fetch chain records', 500, error);

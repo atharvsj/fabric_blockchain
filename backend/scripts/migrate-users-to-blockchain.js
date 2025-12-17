@@ -48,6 +48,7 @@ async function createTable() {
             hash_value VARCHAR(200),
             blockchain_tx_id VARCHAR(200),
             operation_type VARCHAR(20) DEFAULT 'INSERT',
+            blockchain_status CHAR(1) DEFAULT 'P',
             created_at TIMESTAMP DEFAULT NOW(),
             updated_at TIMESTAMP DEFAULT NOW(),
             CONSTRAINT unique_user_operation UNIQUE (user_id, hash_value)
@@ -250,15 +251,15 @@ async function userRecordExists(userId, hash) {
 /**
  * Save record to user_chain_records table
  */
-async function saveUserChainRecord(id, userId, dataJson, hashValue, blockchainTxId, operationType = 'INSERT') {
+async function saveUserChainRecord(id, userId, dataJson, hashValue, blockchainTxId, operationType = 'INSERT', blockchainStatus = 'P') {
     const query = `
         INSERT INTO ${SCHEMA}.user_chain_records 
-        (id, user_id, data_json, hash_value, blockchain_tx_id, operation_type, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW())
+        (id, user_id, data_json, hash_value, blockchain_tx_id, operation_type, blockchain_status, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
         RETURNING *
     `;
     
-    const values = [id, userId, dataJson, hashValue, blockchainTxId, operationType];
+    const values = [id, userId, dataJson, hashValue, blockchainTxId, operationType, blockchainStatus];
     const result = await pool.query(query, values);
     return result.rows[0];
 }

@@ -135,7 +135,7 @@ Content-Type: application/json
 
 ---
 
-### 5. Delete User
+### 5. Delete User + Store on Blockchain
 
 ```
 DELETE /api/users/:userId
@@ -145,8 +145,15 @@ DELETE /api/users/:userId
 ```json
 {
   "success": true,
-  "data": { "userId": "166" },
-  "message": "User deleted successfully"
+  "data": { 
+    "userId": "166",
+    "onChainProof": {
+      "hash": "0x...",
+      "transactionId": "0x...",
+      "timestamp": "2025-12-17T..."
+    }
+  },
+  "message": "User deleted and recorded on blockchain"
 }
 ```
 
@@ -171,6 +178,7 @@ GET /api/users/chain-records?limit=50&offset=0
         "hash_value": "0x...",
         "blockchain_tx_id": "0x...",
         "operation_type": "INSERT",
+        "blockchain_status": "P",
         "created_at": "2025-12-17T..."
       }
     ],
@@ -179,12 +187,37 @@ GET /api/users/chain-records?limit=50&offset=0
 }
 ```
 
+**blockchain_status Values:**
+- `P` = Pending (awaiting approval)
+- `A` = Approved
+- `R` = Rejected
+
 ---
 
-### 7. Get Chain Records for Specific User
+### 7. Get Chain Records for Specific User (with Status Filter)
 
 ```
 GET /api/users/:userId/chain-records
+GET /api/users/:userId/chain-records?status=P
+GET /api/users/:userId/chain-records?status=A
+GET /api/users/:userId/chain-records?status=R
+```
+
+**Query Parameters:**
+| Parameter | Values | Description |
+|-----------|--------|-------------|
+| status | P, A, R | Filter by blockchain status (optional) |
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "records": [...],
+    "count": 5,
+    "filter": { "status": "P" }
+  }
+}
 ```
 
 ---
@@ -247,6 +280,8 @@ Content-Type: application/json
 
 ### 2. Approve Change
 
+Approves a pending change on the blockchain AND updates the off-chain `blockchain_status` column to 'A'.
+
 ```
 POST /api/approve
 Content-Type: application/json
@@ -262,13 +297,21 @@ Content-Type: application/json
 {
   "success": true,
   "message": "Approved successfully",
-  "txHash": "0x..."
+  "txHash": "0x...",
+  "offChainUpdated": true,
+  "offChainRecord": {
+    "id": "uuid",
+    "user_id": "166",
+    "blockchain_status": "A"
+  }
 }
 ```
 
 ---
 
 ### 3. Reject Change
+
+Rejects a pending change on the blockchain AND updates the off-chain `blockchain_status` column to 'R'.
 
 ```
 POST /api/reject
@@ -285,7 +328,13 @@ Content-Type: application/json
 {
   "success": true,
   "message": "Rejected successfully",
-  "txHash": "0x..."
+  "txHash": "0x...",
+  "offChainUpdated": true,
+  "offChainRecord": {
+    "id": "uuid",
+    "user_id": "166",
+    "blockchain_status": "R"
+  }
 }
 ```
 

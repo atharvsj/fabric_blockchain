@@ -189,16 +189,24 @@ class UserService {
     }
 
     /**
-     * Get chain records by user ID
+     * Get chain records by user ID with optional status filter
      */
-    async getChainRecordsByUserId(userId) {
-        const query = `
+    async getChainRecordsByUserId(userId, status = null) {
+        let query = `
             SELECT * FROM ${SCHEMA}.user_chain_records 
             WHERE user_id = $1 
-            ORDER BY created_at DESC
         `;
+        const values = [userId];
+        
+        if (status) {
+            query += ` AND blockchain_status = $2`;
+            values.push(status);
+        }
+        
+        query += ` ORDER BY created_at DESC`;
+        
         try {
-            const result = await pool.query(query, [userId]);
+            const result = await pool.query(query, values);
             return result.rows;
         } catch (error) {
             logger.error('Error fetching chain records for user:', error);
@@ -224,16 +232,16 @@ class UserService {
      * Create user chain record
      */
     async createChainRecord(recordData) {
-        const { id, user_id, data_json, hash_value, blockchain_tx_id, operation_type } = recordData;
+        const { id, user_id, data_json, hash_value, blockchain_tx_id, operation_type, blockchain_status } = recordData;
         
         const query = `
             INSERT INTO ${SCHEMA}.user_chain_records 
-            (id, user_id, data_json, hash_value, blockchain_tx_id, operation_type, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, NOW())
+            (id, user_id, data_json, hash_value, blockchain_tx_id, operation_type, blockchain_status, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
             RETURNING *
         `;
         
-        const values = [id, user_id, data_json, hash_value, blockchain_tx_id, operation_type || 'INSERT'];
+        const values = [id, user_id, data_json, hash_value, blockchain_tx_id, operation_type || 'INSERT', blockchain_status || 'P'];
         
         try {
             const result = await pool.query(query, values);
@@ -260,6 +268,44 @@ class UserService {
             return result.rows[0] || null;
         } catch (error) {
             logger.error('Error updating chain record:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Update blockchain status of a chain record
+     */
+    async updateBlockchainStatus(id, status) {
+        const query = `
+            UPDATE ${SCHEMA}.user_chain_records 
+            SET blockchain_status = $2, updated_at = NOW()
+            WHERE id = $1
+            RETURNING *
+        `;
+        try {
+            const result = await pool.query(query, [id, status]);
+            return result.rows[0] || null;
+        } catch (error) {
+            logger.error('Error updating blockchain status:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Update blockchain status by blockchain_tx_id
+     */
+    async updateBlockchainStatusByTxId(blockchainTxId, status) {
+        const query = `
+            UPDATE ${SCHEMA}.user_chain_records 
+            SET blockchain_status = $2, updated_at = NOW()
+            WHERE blockchain_tx_id = $1
+            RETURNING *
+        `;
+        try {
+            const result = await pool.query(query, [blockchainTxId, status]);
+            return result.rows[0] || null;
+        } catch (error) {
+            logger.error('Error updating blockchain status by tx_id:', error);
             throw error;
         }
     }

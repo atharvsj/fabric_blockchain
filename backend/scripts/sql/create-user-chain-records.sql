@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS fabric_test.user_chain_records (
     hash_value VARCHAR(200),
     blockchain_tx_id VARCHAR(200),
     operation_type VARCHAR(20) DEFAULT 'INSERT',
+    blockchain_status CHAR(1) DEFAULT 'P',
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     
@@ -28,6 +29,9 @@ ON fabric_test.user_chain_records(created_at);
 CREATE INDEX IF NOT EXISTS idx_user_chain_records_operation 
 ON fabric_test.user_chain_records(operation_type);
 
+CREATE INDEX IF NOT EXISTS idx_user_chain_records_status 
+ON fabric_test.user_chain_records(blockchain_status);
+
 -- Comments
 COMMENT ON TABLE fabric_test.user_chain_records IS 'Stores user data with blockchain proof for audit trail';
 COMMENT ON COLUMN fabric_test.user_chain_records.id IS 'Unique UUID for this record';
@@ -35,4 +39,5 @@ COMMENT ON COLUMN fabric_test.user_chain_records.user_id IS 'Reference to ci_erp
 COMMENT ON COLUMN fabric_test.user_chain_records.data_json IS 'Complete user data snapshot as JSON';
 COMMENT ON COLUMN fabric_test.user_chain_records.hash_value IS 'SHA-256 hash of data_json';
 COMMENT ON COLUMN fabric_test.user_chain_records.blockchain_tx_id IS 'Blockchain transaction hash';
-COMMENT ON COLUMN fabric_test.user_chain_records.operation_type IS 'Type: INSERT, UPDATE, INITIAL_MIGRATION';
+COMMENT ON COLUMN fabric_test.user_chain_records.operation_type IS 'Type: INSERT, UPDATE, DELETE, INITIAL_MIGRATION';
+COMMENT ON COLUMN fabric_test.user_chain_records.blockchain_status IS 'Status: P=Pending, A=Approved, R=Rejected';
